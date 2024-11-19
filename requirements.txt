@@ -1,0 +1,6 @@
+selenium
+requests
+sqlite-utils
+pyinstaller
+pandas
+matplotlib
