@@ -120,6 +120,32 @@ def fetch_desired_container_count(driver, count_class_name):
 firefox_options = Options()
 # firefox_options.add_argument('-headless')
 
+def add_limit_to_url(url, limit=150):
+    """Add or update the limit parameter in the URL"""
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    # Parse the URL
+    parsed = urlparse(url)
+    
+    # Get the query parameters
+    params = parse_qs(parsed.query)
+    
+    # Add or update the limit parameter
+    params['limit'] = [str(limit)]
+    
+    # Reconstruct the URL with the new query string
+    new_query = urlencode(params, doseq=True)
+    new_url = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        new_query,
+        parsed.fragment
+    ))
+    
+    return new_url
+
 def main(category, sub_category, url, class_name, count_class_name, exchange_rate):
         
     with webdriver.Firefox(options=firefox_options) as driver:
@@ -145,6 +171,16 @@ def main(category, sub_category, url, class_name, count_class_name, exchange_rat
             wait = WebDriverWait(driver, 20)
 
             print("Loading the provided url...")
+            # Check if URL already has limit=150, if not add it
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            
+            if 'limit' not in params or params['limit'][0] != '150':
+                print("Adding limit=150 to URL...")
+                url = add_limit_to_url(url)
+                print(f"Modified URL: {url}")
+
             retry(
                 lambda: driver.get(url),
                 MAX_URL_LOAD_RETRIES,
@@ -153,8 +189,6 @@ def main(category, sub_category, url, class_name, count_class_name, exchange_rat
 
             # Wait for a specific count of product containers to be present
             print("Determining the amount of products to expect...\n")
-            # wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[data-qa="select-menu-btn-plp_display"]')))
-            # desired_container_count_str = driver.find_elements(By.CSS_SELECTOR, 'span[data-qa="select-menu-btn-label"]')[1].text.split(' ')[0]
             desired_container_count = fetch_desired_container_count(driver, count_class_name)
             print(desired_container_count)
             
@@ -163,21 +197,12 @@ def main(category, sub_category, url, class_name, count_class_name, exchange_rat
 
             # Calculate the number of pages to navigate
             print("Calculating the number of pages to navigate...\n")
-            while True:
-                # Wait for the target element to be clickable and visible
-                products_per_page_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[data-qa="select-menu-btn-plp_display"]')))
-                products_per_page = driver.find_elements(By.CSS_SELECTOR,'span[data-qa="select-menu-btn-label"]')[1].text.split(' ')[0]
-                if(int(products_per_page) != 150):
-                    print("products per page:", products_per_page)
-                    print("Changing the amount of products per page")
-                    products_per_page_button.click()
-                    true_per_page = driver.find_element(By.CSS_SELECTOR, 'li[data-value="150"]')
-                    true_per_page.click()
-                    time.sleep(5)
-                else:
-                    print("products per page: 150")
-                    break
-                
+            
+            # Wait for page to be fully loaded
+            WebDriverWait(driver, 20).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            
             num_pages = desired_container_count // 150 + (1 if desired_container_count % 150 > 0 else 0)
             print("Number of pages:", num_pages)
             print("Number of pages:", num_pages)
